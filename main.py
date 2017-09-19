@@ -1,6 +1,7 @@
 import sys
 import queue
 import copy
+import time
 
 from pyclustering.cluster.optics import optics
 from pyclustering.cluster import cluster_visualizer
@@ -81,7 +82,7 @@ def update(obj, neighbors, pri_queue):
     return
 
 def process_affected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
-    print("PROCESS AFFECTED POINT")
+    #print("PROCESS AFFECTED POINT")
     neighbors1 = get_neighbors(obj.point, objects1, rtree1)
     neighbors2 = get_neighbors(obj.point, objects2, rtree2)
     neighbors1.extend(neighbors2)
@@ -99,14 +100,25 @@ def process_affected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, d
 def predecessor(obj, objects1, objects2, rtree1, rtree2):
     neighbors1 = get_neighbors(obj.point, objects1, rtree1)
     neighbors2 = get_neighbors(obj.point, objects2, rtree2)
-    neighbors = neighbors1.extend(neighbors2)
-    [neighbor for neighbor in neighbors if obj.reachability_distance == max([obj.core_distance, euclidean(obj.point, neighbor.point)])]
+    neighbors1.extend(neighbors2)
+    neighbors = neighbors1
+    for neighbor in neighbors:
+        if obj.core_distance is not None:
+            if obj.reachability_distance == max([obj.core_distance, euclidean(obj.point, neighbor.point)]):
+                return neighbor
+        else:
+            if obj.reachability_distance == euclidean(obj.point, neighbor.point):
+                return neighbor
+    #[neighbor for neighbor in neighbors if obj.reachability_distance == max([obj.core_distance, euclidean(obj.point, neighbor.point)])]
 
 def successors(obj, objects1, objects2, rtree1, rtree2, neighbors):
+    ss = []
     for neighbor in neighbors:
-        pre = predecessor(obj, objects1, objects2, rtree1, rtree2)
-        if predecessor is not None and obj.index_object == pre.index_object:
-            return neighbor
+        pre = predecessor(neighbor, objects1, objects2, rtree1, rtree2)
+        if pre is not None:
+            if obj.index_object == pre.index_object:
+                ss.append(neighbor)
+    return ss
 
 def exists_in_queue(obj, q):
     q2 = queue.PriorityQueue()
@@ -129,31 +141,36 @@ def update_pq(target, pri_queue):
 def reachdist(obj, origin, objects1, objects2, rtree1, rtree2):
     neighbors1 = get_neighbors(origin.point, objects1, rtree1)
     neighbors2 = get_neighbors(origin.point, objects2, rtree2)
-    neighbors = neighbors1.extend(neighbors2)
+    neighbors1.extend(neighbors2)
+    neighbors = neighbors1
     reachdist = None
     if len(neighbors) >= minpts:
         reachdist = max(minpts_distance(obj, neighbors), euclidean(obj.point, origin.point))
     return reachdist
 
 def process_nonaffected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
-    print("PROCESS NON AFFECTED POINT")
-    successors = successors(obj, objects1, objects2, rtree1, rtree2, neighbors)
-    predecessor = predecessor(obj, objects1, objects2, rtree1, rtree2)
-    targets = successors.append(predecessor)
+    #print("PROCESS NON AFFECTED POINT")
+    neighbors1 = get_neighbors(obj.point, objects1, rtree1)
+    neighbors2 = get_neighbors(obj.point, objects2, rtree2)
+    neighbors1.extend(neighbors2)
+    neighbors = neighbors1
+    ss = successors(obj, objects1, objects2, rtree1, rtree2, neighbors)
+    ps = predecessor(obj, objects1, objects2, rtree1, rtree2)
+    if ps is not None:
+        ss.append(ps)
+    targets = ss
     for target in targets:
+        rdist = reachdist(target, obj, objects1, objects2, rtree1, rtree2)
         if target.processed == True:
             continue
         if not exists_in_queue(target, pri_queue):
-            target.reachability_distance = reachdist(target, obj)
+            target.reachability_distance = rdist
             pri_queue.put(target)
-            print("QQQQQQQQQQQQQQQQQQQ")
-        elif reachdist(target, obj) is None:
-            print("RRRRRRRRRRRRRRRRRRRR")
+        elif rdist is None:
             continue
-        elif reachdist(target, obj) < target.reachability_distance:
-            target.reachability_distance = reachdist(target, obj)
+        elif rdist < target.reachability_distance:
+            target.reachability_distance = rdist
             pri_queue = update_pq(target, pri_queue)
-            print("PPPPPPPPPPPPPPPPPPPP")
     dest_objects.append(obj)
     obj.processed = True
     for obj2 in objects1:
@@ -189,6 +206,15 @@ def process_co(objects1, objects2, rtree1, rtree2, dest_objects):
                     process_affected_point(objects1, objects2, rtree1, rtree2, obj, pq, dest_objects)
                     if pq.qsize() != 0:
                         break
+    """
+    for obj in [obj for obj in objects1 if obj.processed == False ]:
+        if rank == 0:
+            print("here rest = %s" % len([obj for obj in objects1 if obj.processed == False ]))
+        if obj.processed == True:
+            continue
+        else:
+            process(objects1, objects2, rtree1, rtree2, obj, pq, dest_objects)
+    """
     while pq.qsize() != 0:
         q = pq.get()
         process(objects1, objects2, rtree1, rtree2, q, pq, dest_objects)
@@ -291,4 +317,12 @@ if __name__ == '__main__':
     input_filepath = argv[1]
     eps = float(argv[2])
     minpts = int(argv[3])
+
+    if rank == 0:
+        start = time.time()
+
     mpi_optics(input_filepath, eps, minpts)
+
+    if rank == 0:
+        elapsed_time = time.time() - start
+        print ("elapsed_time:{0}".format(elapsed_time) + "[sec]")
