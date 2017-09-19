@@ -17,6 +17,7 @@ from scipy.spatial.distance import euclidean
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
+name = MPI.Get_processor_name()
 
 dimension = 2
 
@@ -41,10 +42,11 @@ def get_neighbors(point, points, rtree):
     neighbors = rtree.intersection(new_bounds)
     results = []
     for neighbor in neighbors:
-        neighbor = [obj for obj in points if obj.index_object == neighbor][0]
-        dist = euclidean(point, neighbor.point)
-        if dist < eps:
-            results.append(neighbor)
+        if len([obj for obj in points if obj.index_object == neighbor]) > 0:
+            neighbor = [obj for obj in points if obj.index_object == neighbor][0]
+            dist = euclidean(point, neighbor.point)
+            if dist < eps:
+                results.append(neighbor)
     return results
 
 def minpts_distance(obj, neighbors):
@@ -273,7 +275,7 @@ def mpi_optics(input_filepath, eps, minpts):
     else:
         distributed_data = comm.recv(source=0, tag=rank)
 
-    print("rank=%s, size=%s" % (rank, len(distributed_data)))
+    print("rank=%s, size=%s, name=%s" % (rank, len(distributed_data), name))
 
     optics_instance = optics(distributed_data, eps, minpts)
     optics_instance.process()
