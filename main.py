@@ -54,9 +54,9 @@ def minpts_distance(obj, neighbors):
     minpts_distance = euclidean(obj.point, neighbors[minpts-1].point)
     return minpts_distance
 
-def mark_affected_points(objects1, objects2, rtree1, rtree2):
-    points1 = [x.point for x in objects1]
-    points2 = [x.point for x in objects2]
+def mark_affected_points(dict_objects1, dict_objects2, rtree1, rtree2):
+    points1 = [x.point for x in dict_objects1.values()]
+    points2 = [x.point for x in dict_objects2.values()]
     bounds1 = extended_mbr(points1, eps)
     bounds2 = extended_mbr(points2, eps)
     new_bounds1 = []
@@ -68,23 +68,28 @@ def mark_affected_points(objects1, objects2, rtree1, rtree2):
     candidates1 = list(rtree1.intersection(new_bounds2))
     candidates2 = list(rtree2.intersection(new_bounds1))
     for x in candidates1:
-        x_pt = [obj.point for obj in objects1 if obj.index_object == x][0]
+        x_pt = dict_objects1[x].point
         for y in candidates2:
-            y_pt = [obj.point for obj in objects2 if obj.index_object == y][0]
+            y_pt = dict_objects2[y].point
             dist = euclidean(x_pt, y_pt)
-            for obj in objects1:
-                if obj.index_object == x:
-                    obj.affected = True
-            for obj in objects2:
-                if obj.index_object == y:
-                    obj.affected = True
+            if dist < eps:
+                dict_objects1[x].affected = True
+                dict_objects1[x].affected = True
+                """for obj in objects1:
+                    if obj.index_object == x:
+                        obj.affected = True
+                for obj in objects2:
+                    if obj.index_object == y:
+                        obj.affected = True"""
     return
 
 def update(obj, neighbors, pri_queue):
     return
 
-def process_affected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
+def process_affected_point(dict_objects1, dict_objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
     #print("PROCESS AFFECTED POINT")
+    objects1 = dict_objects1.values()
+    objects2 = dict_objects2.values()
     neighbors1 = get_neighbors(obj.point, objects1, rtree1)
     neighbors2 = get_neighbors(obj.point, objects2, rtree2)
     neighbors1.extend(neighbors2)
@@ -94,9 +99,10 @@ def process_affected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, d
         update(obj, neighbors, pri_queue)
         dest_objects.append(obj)
     obj.processed = True
-    for obj2 in objects1:
+    dict_objects1[obj.index_object].processed = True
+    """for obj2 in objects1:
         if obj.index_object == obj2.index_object:
-            obj2.processed = True
+            obj2.processed = True"""
     
 
 def predecessor(obj, objects1, objects2, rtree1, rtree2):
@@ -150,8 +156,10 @@ def reachdist(obj, origin, objects1, objects2, rtree1, rtree2):
         reachdist = max(minpts_distance(obj, neighbors), euclidean(obj.point, origin.point))
     return reachdist
 
-def process_nonaffected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
+def process_nonaffected_point(dict_objects1, dict_objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
     #print("PROCESS NON AFFECTED POINT")
+    objects1 = dict_objects1.values()
+    objects2 = dict_objects2.values()
     neighbors1 = get_neighbors(obj.point, objects1, rtree1)
     neighbors2 = get_neighbors(obj.point, objects2, rtree2)
     neighbors1.extend(neighbors2)
@@ -175,27 +183,28 @@ def process_nonaffected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue
             pri_queue = update_pq(target, pri_queue)
     dest_objects.append(obj)
     obj.processed = True
-    for obj2 in objects1:
+    dict_objects1[obj.index_object].processed = True
+    """for obj2 in objects1:
         if obj.index_object == obj2.index_object:
-            obj2.processed = True
+            obj2.processed = True"""
     return
 
-def process(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
+def process(dict_objects1, dict_objects2, rtree1, rtree2, obj, pri_queue, dest_objects):
     if obj.affected:
-        process_affected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects)
+        process_affected_point(dict_objects1, dict_objects2, rtree1, rtree2, obj, pri_queue, dest_objects)
     else:
-        process_nonaffected_point(objects1, objects2, rtree1, rtree2, obj, pri_queue, dest_objects)
+        process_nonaffected_point(dict_objects1, dict_objects2, rtree1, rtree2, obj, pri_queue, dest_objects)
     return
 
-def process_co(objects1, objects2, rtree1, rtree2, dest_objects):
+def process_co(dict_objects1, dict_objects2, rtree1, rtree2, dest_objects):
     pq = queue.PriorityQueue()
     #while len([obj for obj in objects1 if obj.processed == False]) > 0:
-    while len([obj for obj in objects1 if obj.processed == False and obj.affected == True]) > 0:
+    while len([obj for obj in dict_objects1.values() if obj.processed == False and obj.affected == True]) > 0:
         if pq.qsize() > 0:
             q = pq.get()
-            process(objects1, objects2, rtree1, rtree2, q, pq, dest_objects)
+            process(dict_objects1, dict_objects2, rtree1, rtree2, q, pq, dest_objects)
         else:
-            for obj in [obj for obj in objects1 if obj.processed == False ]:
+            for obj in [obj for obj in dict_objects1.values() if obj.processed == False ]:
                 if obj.processed:
                     continue
             #while len([obj for obj in co1 if obj.processed == False ]) > 0:
@@ -205,7 +214,7 @@ def process_co(objects1, objects2, rtree1, rtree2, dest_objects):
                 #if rank == 0:
                 #    print([obj for obj in co1 if obj.affected == True ])
                 if obj.affected:
-                    process_affected_point(objects1, objects2, rtree1, rtree2, obj, pq, dest_objects)
+                    process_affected_point(dict_objects1, dict_objects2, rtree1, rtree2, obj, pq, dest_objects)
                     if pq.qsize() != 0:
                         break
     """
@@ -219,7 +228,7 @@ def process_co(objects1, objects2, rtree1, rtree2, dest_objects):
     """
     while pq.qsize() != 0:
         q = pq.get()
-        process(objects1, objects2, rtree1, rtree2, q, pq, dest_objects)
+        process(dict_objects1, dict_objects2, rtree1, rtree2, q, pq, dest_objects)
     return
 
 def merge(optics_instance1, optics_instance2):
@@ -240,15 +249,29 @@ def merge(optics_instance1, optics_instance2):
     for obj in objects2:
         idx2.insert(obj.index_object, obj.point)
 
-    mark_affected_points(objects1, objects2, idx1, idx2)
+    dict_objects1 = {}
+    dict_objects2 = {}
+    for obj in objects1:
+        dict_objects1[obj.index_object] = obj
+    for obj in objects2:
+        dict_objects2[obj.index_object] = obj
+
+    mark_affected_points(dict_objects1, dict_objects2, idx1, idx2)
 
     dest_objects = []
-    process_co(objects1, objects2, idx1, idx2, dest_objects)
-    process_co(objects2, objects1, idx1, idx2, dest_objects)
+    process_co(dict_objects1, dict_objects2, idx1, idx2, dest_objects)
+    process_co(dict_objects2, dict_objects1, idx1, idx2, dest_objects)
 
-    dest_objects = objects1
-    dest_objects.extend(objects2)
-    
+    dest_objects1 = list(dict_objects1.values())
+    dest_objects2 = list(dict_objects2.values())
+
+    for obj in dest_objects2:
+        #obj.index_object = (obj.index_object + 1) * len(dest_objects1)
+        obj.index_object = obj.index_object + len(dest_objects1)
+
+    dest_objects = dest_objects1
+    dest_objects.extend(dest_objects2)
+
     return dest_objects
 
 def reset_flags(optics_objects):
