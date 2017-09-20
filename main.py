@@ -74,7 +74,7 @@ def mark_affected_points(dict_objects1, dict_objects2, rtree1, rtree2):
             dist = euclidean(x_pt, y_pt)
             if dist < eps:
                 dict_objects1[x].affected = True
-                dict_objects1[x].affected = True
+                dict_objects2[y].affected = True
                 """for obj in objects1:
                     if obj.index_object == x:
                         obj.affected = True
